@@ -15,7 +15,8 @@
 
 ## 下载与签名
 
-发布包位于 [GitHub Releases](https://github.com/mrxss192/ntfy-android-dsh/releases)。本 fork 不使用上游 ntfy APK 的签名密钥；当前构建产物为 unsigned，Android 不能直接安装。签名状态会在每个 Release 中明确标注。
+发布包位于 [GitHub Releases](https://github.com/mrxss192/ntfy-android-dsh/releases)。
+此 fork 使用独立应用 ID 和签名证书，不使用上游 ntfy APK 的签名密钥。。签名状态会在每个 Release 中明确标注。
 
 ## Build
 For up-to-date building instructions, please see the [official docs](https://docs.ntfy.sh/develop/#android-app).
