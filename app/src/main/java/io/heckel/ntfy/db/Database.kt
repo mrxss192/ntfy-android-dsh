@@ -5,6 +5,7 @@ import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Embedded
 import androidx.room.Entity
+import androidx.room.ForeignKey
 import androidx.room.Ignore
 import androidx.room.Index
 import androidx.room.Insert
@@ -298,8 +299,40 @@ data class LogEntry(
             this(0, timestamp, tag, level, message, exception)
 }
 
+@Entity(tableName = "PhoneConversation", indices = [Index(value = ["updatedAt"])])
+data class PhoneConversation(
+    @PrimaryKey val id: String,
+    val title: String,
+    val lastMessage: String,
+    val sessionCode: String?,
+    val status: String,
+    val createdAt: Long,
+    val updatedAt: Long,
+    val unreadCount: Int,
+)
+
+@Entity(
+    tableName = "PhoneMessage",
+    foreignKeys = [ForeignKey(
+        entity = PhoneConversation::class,
+        parentColumns = ["id"],
+        childColumns = ["conversationId"],
+        onDelete = ForeignKey.CASCADE,
+    )],
+    indices = [Index(value = ["conversationId", "timestamp"]), Index(value = ["remoteId"], unique = true)],
+)
+data class PhoneMessage(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val conversationId: String,
+    val remoteId: String?,
+    val direction: String,
+    val body: String,
+    val timestamp: Long,
+    val isRead: Boolean,
+)
+
 @androidx.room.Database(
-    version = 18,
+    version = 19,
     entities = [
         Subscription::class,
         Notification::class,
@@ -307,7 +340,9 @@ data class LogEntry(
         LogEntry::class,
         CustomHeader::class,
         TrustedCertificate::class,
-        ClientCertificate::class
+        ClientCertificate::class,
+        PhoneConversation::class,
+        PhoneMessage::class
    ]
 )
 @TypeConverters(Converters::class)
@@ -319,6 +354,8 @@ abstract class Database : RoomDatabase() {
     abstract fun logDao(): LogDao
     abstract fun trustedCertificateDao(): TrustedCertificateDao
     abstract fun clientCertificateDao(): ClientCertificateDao
+    abstract fun phoneConversationDao(): PhoneConversationDao
+    abstract fun phoneMessageDao(): PhoneMessageDao
 
     companion object {
         @Volatile
@@ -345,6 +382,7 @@ abstract class Database : RoomDatabase() {
                     .addMigrations(MIGRATION_15_16)
                     .addMigrations(MIGRATION_16_17)
                     .addMigrations(MIGRATION_17_18)
+                    .addMigrations(MIGRATION_18_19)
                     .fallbackToDestructiveMigration(true)
                     .build()
                 this.instance = instance
@@ -483,6 +521,16 @@ abstract class Database : RoomDatabase() {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE Notification ADD COLUMN sequenceId TEXT NOT NULL DEFAULT ''")
                 db.execSQL("UPDATE Notification SET sequenceId = id WHERE sequenceId = ''")
+            }
+        }
+
+        private val MIGRATION_18_19 = object : Migration(18, 19) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS PhoneConversation (id TEXT NOT NULL, title TEXT NOT NULL, lastMessage TEXT NOT NULL, sessionCode TEXT, status TEXT NOT NULL, createdAt INTEGER NOT NULL, updatedAt INTEGER NOT NULL, unreadCount INTEGER NOT NULL, PRIMARY KEY(id))")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_PhoneConversation_updatedAt ON PhoneConversation (updatedAt)")
+                db.execSQL("CREATE TABLE IF NOT EXISTS PhoneMessage (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, conversationId TEXT NOT NULL, remoteId TEXT, direction TEXT NOT NULL, body TEXT NOT NULL, timestamp INTEGER NOT NULL, isRead INTEGER NOT NULL, FOREIGN KEY(conversationId) REFERENCES PhoneConversation(id) ON UPDATE NO ACTION ON DELETE CASCADE)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_PhoneMessage_conversationId_timestamp ON PhoneMessage (conversationId, timestamp)")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_PhoneMessage_remoteId ON PhoneMessage (remoteId)")
             }
         }
     }
@@ -731,4 +779,40 @@ interface CustomHeaderDao {
 
     @Query("DELETE FROM CustomHeader WHERE baseUrl = :baseUrl AND name = :name")
     suspend fun delete(baseUrl: String, name: String)
+}
+
+@Dao
+interface PhoneConversationDao {
+    @Query("SELECT * FROM PhoneConversation ORDER BY updatedAt DESC")
+    fun listFlow(): Flow<List<PhoneConversation>>
+
+    @Query("SELECT * FROM PhoneConversation WHERE id = :id")
+    suspend fun get(id: String): PhoneConversation?
+
+    @Query("SELECT * FROM PhoneConversation WHERE sessionCode = :sessionCode LIMIT 1")
+    suspend fun getBySessionCode(sessionCode: String): PhoneConversation?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(conversation: PhoneConversation)
+
+    @Update
+    suspend fun update(conversation: PhoneConversation)
+
+    @Query("DELETE FROM PhoneConversation WHERE id = :id")
+    suspend fun delete(id: String)
+}
+
+@Dao
+interface PhoneMessageDao {
+    @Query("SELECT * FROM PhoneMessage WHERE conversationId = :conversationId ORDER BY timestamp ASC, id ASC")
+    fun listFlow(conversationId: String): Flow<List<PhoneMessage>>
+
+    @Query("SELECT EXISTS(SELECT 1 FROM PhoneMessage WHERE conversationId = :conversationId AND direction = :direction AND body = :body AND timestamp >= :afterTimestamp)")
+    suspend fun containsRecent(conversationId: String, direction: String, body: String, afterTimestamp: Long): Boolean
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insert(message: PhoneMessage): Long
+
+    @Query("UPDATE PhoneMessage SET isRead = 1 WHERE conversationId = :conversationId")
+    suspend fun markAllAsRead(conversationId: String)
 }

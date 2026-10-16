@@ -195,6 +195,7 @@ class PublishFragment : DialogFragment() {
         // Main fields
         titleText = view.findViewById(R.id.publish_dialog_title_text)
         messageText = view.findViewById(R.id.publish_dialog_message_text)
+        CommandSuggestions(messageText)
         tagsText = view.findViewById(R.id.publish_dialog_tags_text)
         priorityDropdown = view.findViewById(R.id.publish_dialog_priority_dropdown)
         uploadProgress = view.findViewById(R.id.publish_dialog_upload_progress)

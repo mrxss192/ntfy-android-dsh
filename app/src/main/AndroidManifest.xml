@@ -44,6 +44,22 @@
             </intent-filter>
         </activity>
 
+        <activity
+                android:name=".ui.VscodeConversationsActivity"
+                android:parentActivityName=".ui.MainActivity"
+                android:windowSoftInputMode="adjustResize"
+                android:exported="true">
+            <meta-data
+                    android:name="android.support.PARENT_ACTIVITY"
+                    android:value=".ui.MainActivity"/>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="dsh-chat" android:host="message" />
+            </intent-filter>
+        </activity>
+
         <!-- Detail activity -->
         <activity
                 android:name=".ui.DetailActivity"

@@ -6,11 +6,13 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.provider.Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM
 import android.view.View
+import android.widget.EditText
 import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
@@ -25,6 +27,7 @@ import androidx.fragment.app.DialogFragment
 import androidx.lifecycle.lifecycleScope
 import androidx.preference.*
 import androidx.preference.Preference.OnPreferenceClickListener
+import com.google.android.material.color.MaterialColors
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.gson.Gson
 import io.heckel.ntfy.BuildConfig
@@ -69,14 +72,16 @@ class SettingsActivity : AppCompatActivity(), PreferenceFragmentCompat.OnPrefere
         serviceManager = SubscriberServiceManager(this)
 
         val toolbarLayout = findViewById<View>(R.id.app_bar_drawer)
-        val dynamicColors = repository.getDynamicColorsEnabled()
+        val dynamicColors = repository.getDynamicColorSchemeEnabled()
         val darkMode = isDarkThemeOn(this)
+        val customThemeColor = repository.getCustomThemeColor() != null
         val statusBarColor = Colors.statusBarNormal(
             this,
             dynamicColors,
-            darkMode
+            darkMode,
+            customThemeColor,
         )
-        val toolbarTextColor = Colors.toolbarTextColor(this, dynamicColors, darkMode)
+        val toolbarTextColor = Colors.toolbarTextColor(this, dynamicColors, darkMode, customThemeColor)
         toolbarLayout.setBackgroundColor(statusBarColor)
         
         val toolbar = toolbarLayout.findViewById<com.google.android.material.appbar.MaterialToolbar>(R.id.toolbar)
@@ -87,7 +92,7 @@ class SettingsActivity : AppCompatActivity(), PreferenceFragmentCompat.OnPrefere
         
         // Set system status bar appearance
         WindowInsetsControllerCompat(window, window.decorView).isAppearanceLightStatusBars =
-            Colors.shouldUseLightStatusBar(dynamicColors, darkMode)
+            Colors.shouldUseLightStatusBar(this, dynamicColors, darkMode, customThemeColor)
 
         if (savedInstanceState == null) {
             settingsFragment = SettingsFragment() // Empty constructor!
@@ -168,6 +173,24 @@ class SettingsActivity : AppCompatActivity(), PreferenceFragmentCompat.OnPrefere
             repository = Repository.getInstance(requireActivity())
             serviceManager = SubscriberServiceManager(requireActivity())
             autoDownloadSelection = repository.getAutoDownloadMaxSize() // Only used for <= Android P, due to permissions request
+
+            fun restartApplication() {
+                val launchIntent = requireActivity().packageManager
+                    .getLaunchIntentForPackage(requireActivity().packageName)
+                val componentName = launchIntent?.component ?: return
+                requireActivity().startActivity(Intent.makeRestartActivityTask(componentName))
+                Runtime.getRuntime().exit(0)
+            }
+
+            fun updateCustomThemeColorSummary(preference: Preference?) {
+                val color = repository.getCustomThemeColor()
+                preference?.summary = color?.let {
+                    getString(
+                        R.string.settings_general_custom_theme_color_summary_custom,
+                        String.format(Locale.ROOT, "#%06X", 0xFFFFFF and it),
+                    )
+                } ?: getString(R.string.settings_general_custom_theme_color_summary_default)
+            }
 
             // Important note: We do not use the default shared prefs to store settings. Every
             // preferenceDataStore is overridden to use the repository. This is convenient, because
@@ -452,30 +475,55 @@ class SettingsActivity : AppCompatActivity(), PreferenceFragmentCompat.OnPrefere
                 }
             }
 
+            // Custom theme color
+            val customThemeColorPrefId = context?.getString(R.string.settings_general_custom_theme_color_key) ?: return
+            val customThemeColorPref: Preference? = findPreference(customThemeColorPrefId)
+            customThemeColorPref?.isVisible = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+            updateCustomThemeColorSummary(customThemeColorPref)
+            customThemeColorPref?.setOnPreferenceClickListener {
+                val currentColor = repository.getCustomThemeColor()
+                ColorPickerDialog.show(
+                    context = requireContext(),
+                    title = getString(R.string.settings_general_custom_theme_color_title),
+                    initialColor = currentColor ?: MaterialColors.getColor(
+                        requireContext(),
+                        R.attr.colorPrimary,
+                        Color.BLUE,
+                    ),
+                    resetLabel = getString(R.string.common_button_reset_to_default),
+                    onReset = {
+                        repository.setCustomThemeColor(null)
+                        updateCustomThemeColorSummary(customThemeColorPref)
+                        restartApplication()
+                    },
+                    onColorSelected = { color ->
+                        repository.setCustomThemeColor(color)
+                        updateCustomThemeColorSummary(customThemeColorPref)
+                        restartApplication()
+                    },
+                )
+                true
+            }
+
             // Dynamic colors
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 val dynamicColorsEnabledPrefId = context?.getString(R.string.settings_general_dynamic_colors_key) ?: return
                 val dynamicColorsEnabled: SwitchPreferenceCompat? = findPreference(dynamicColorsEnabledPrefId)
                 dynamicColorsEnabled?.isChecked = repository.getDynamicColorsEnabled()
+                dynamicColorsEnabled?.isEnabled = repository.getCustomThemeColor() == null
                 dynamicColorsEnabled?.preferenceDataStore = object : PreferenceDataStore() {
                     override fun putBoolean(key: String?, value: Boolean) {
                         repository.setDynamicColorsEnabled(value)
-
-                        // Restart app
-                        val packageManager = requireContext().packageManager
-                        val packageName = requireContext().packageName
-                        val intent = packageManager.getLaunchIntentForPackage(packageName)
-                        val componentName = intent!!.component
-                        val mainIntent = Intent.makeRestartActivityTask(componentName)
-                        startActivity(mainIntent)
-                        Runtime.getRuntime().exit(0)
+                        restartApplication()
                     }
                     override fun getBoolean(key: String?, defValue: Boolean): Boolean {
                         return repository.getDynamicColorsEnabled()
                     }
                 }
                 dynamicColorsEnabled?.summaryProvider = Preference.SummaryProvider<SwitchPreferenceCompat> { pref ->
-                    if (pref.isChecked) {
+                    if (repository.getCustomThemeColor() != null) {
+                        getString(R.string.settings_general_dynamic_colors_summary_overridden)
+                    } else if (pref.isChecked) {
                         getString(R.string.settings_general_dynamic_colors_summary_enabled)
                     } else {
                         getString(R.string.settings_general_dynamic_colors_summary_disabled)

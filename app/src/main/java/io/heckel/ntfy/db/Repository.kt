@@ -25,6 +25,8 @@ class Repository(private val sharedPrefs: SharedPreferences, database: Database)
     private val trustedCertificateDao = database.trustedCertificateDao()
     private val clientCertificateDao = database.clientCertificateDao()
     private val customHeaderDao = database.customHeaderDao()
+    private val phoneConversationDao = database.phoneConversationDao()
+    private val phoneMessageDao = database.phoneMessageDao()
 
     private val connectionDetails = ConcurrentHashMap<String, ConnectionDetails>()
     private val connectionDetailsLiveData = MutableLiveData<Map<String, ConnectionDetails>>(connectionDetails)
@@ -127,6 +129,29 @@ class Repository(private val sharedPrefs: SharedPreferences, database: Database)
     fun getNotificationsFilteredLiveData(subscriptionId: Long, query: String): LiveData<List<Notification>> {
         return notificationDao.listFlowFiltered(subscriptionId, query).asLiveData()
     }
+
+    fun getPhoneConversationsLiveData(): LiveData<List<PhoneConversation>> = phoneConversationDao.listFlow().asLiveData()
+
+    fun getPhoneMessagesLiveData(conversationId: String): LiveData<List<PhoneMessage>> =
+        phoneMessageDao.listFlow(conversationId).asLiveData()
+
+    suspend fun getPhoneConversation(id: String): PhoneConversation? = phoneConversationDao.get(id)
+
+    suspend fun getPhoneConversationBySessionCode(sessionCode: String): PhoneConversation? =
+        phoneConversationDao.getBySessionCode(sessionCode)
+
+    suspend fun addPhoneConversation(conversation: PhoneConversation) = phoneConversationDao.insert(conversation)
+
+    suspend fun updatePhoneConversation(conversation: PhoneConversation) = phoneConversationDao.update(conversation)
+
+    suspend fun deletePhoneConversation(id: String) = phoneConversationDao.delete(id)
+
+    suspend fun addPhoneMessage(message: PhoneMessage): Long = phoneMessageDao.insert(message)
+
+    suspend fun hasRecentPhoneMessage(conversationId: String, direction: String, body: String, afterTimestamp: Long): Boolean =
+        phoneMessageDao.containsRecent(conversationId, direction, body, afterTimestamp)
+
+    suspend fun markPhoneMessagesAsRead(conversationId: String) = phoneMessageDao.markAllAsRead(conversationId)
 
     fun getNotification(notificationId: String): Notification? {
         return notificationDao.get(notificationId)
@@ -352,6 +377,25 @@ class Repository(private val sharedPrefs: SharedPreferences, database: Database)
 
     fun getDynamicColorsEnabled(): Boolean {
         return sharedPrefs.getBoolean(SHARED_PREFS_DYNAMIC_COLORS, false)
+    }
+
+    fun setCustomThemeColor(color: Int?) {
+        sharedPrefs.edit(commit = true) {
+            if (color == null) remove(SHARED_PREFS_CUSTOM_THEME_COLOR)
+            else putInt(SHARED_PREFS_CUSTOM_THEME_COLOR, color)
+        }
+    }
+
+    fun getCustomThemeColor(): Int? {
+        return if (sharedPrefs.contains(SHARED_PREFS_CUSTOM_THEME_COLOR)) {
+            sharedPrefs.getInt(SHARED_PREFS_CUSTOM_THEME_COLOR, 0)
+        } else {
+            null
+        }
+    }
+
+    fun getDynamicColorSchemeEnabled(): Boolean {
+        return getCustomThemeColor() != null || getDynamicColorsEnabled()
     }
 
     fun setConnectionProtocol(connectionProtocol: String) {
@@ -653,6 +697,7 @@ class Repository(private val sharedPrefs: SharedPreferences, database: Database)
         const val SHARED_PREFS_CONNECTION_PROTOCOL = "ConnectionProtocol"
         const val SHARED_PREFS_DARK_MODE = "DarkMode"
         const val SHARED_PREFS_DYNAMIC_COLORS = "DynamicColors"
+        const val SHARED_PREFS_CUSTOM_THEME_COLOR = "CustomThemeColor"
         const val SHARED_PREFS_BROADCAST_ENABLED = "BroadcastEnabled"
         const val SHARED_PREFS_UNIFIEDPUSH_ENABLED = "UnifiedPushEnabled"
         const val SHARED_PREFS_INSISTENT_MAX_PRIORITY_ENABLED = "InsistentMaxPriority"

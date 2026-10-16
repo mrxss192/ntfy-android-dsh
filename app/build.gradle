@@ -4,6 +4,8 @@ plugins {
     id 'com.google.devtools.ksp'
 }
 
+def debugBuildId = new Date().format('yyyyMMdd-HHmmss')
+
 apply plugin: 'com.android.application'
 apply plugin: 'kotlin-android'
 apply plugin: 'com.google.gms.google-services'
@@ -13,12 +15,12 @@ android {
     compileSdkVersion 36
 
     defaultConfig {
-        applicationId "io.heckel.ntfy"
+        applicationId "io.heckel.ntfy.dsh"
         minSdkVersion 26
         targetSdkVersion 36
 
-        versionCode 63
-        versionName "1.25.2"
+        versionCode 64
+        versionName "1.0.0"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
@@ -46,7 +48,7 @@ android {
             shrinkResources false
             debuggable true
             applicationIdSuffix ".debug"
-            versionNameSuffix "-debug"
+            versionNameSuffix "-debug-${debugBuildId}"
         }
     }
 
@@ -87,6 +89,8 @@ android.applicationVariants.all { variant ->
 }
 
 dependencies {
+    testImplementation 'junit:junit:4.13.2'
+
     // AndroidX, The Basics
     implementation "androidx.appcompat:appcompat:1.7.1"
     implementation "androidx.core:core-ktx:1.18.0"

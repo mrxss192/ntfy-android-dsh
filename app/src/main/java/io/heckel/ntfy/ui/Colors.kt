@@ -45,9 +45,11 @@ class Colors {
             }
         }
 
-        fun statusBarNormal(context: Context, dynamicColors: Boolean, darkMode: Boolean): Int {
+        fun statusBarNormal(context: Context, dynamicColors: Boolean, darkMode: Boolean, customThemeColor: Boolean = false): Int {
             val default = context.resources.getColor(R.color.action_bar, null)
-            return if (dynamicColors) {
+            return if (customThemeColor) {
+                MaterialColors.getColor(context, R.attr.colorPrimary, default)
+            } else if (dynamicColors) {
                 // Use colorSurface for both light and dark mode when dynamic colors are enabled
                 MaterialColors.getColor(context, R.attr.colorSurface, default)
             } else {
@@ -55,13 +57,19 @@ class Colors {
             }
         }
 
-        fun shouldUseLightStatusBar(dynamicColors: Boolean, darkMode: Boolean): Boolean {
+        fun shouldUseLightStatusBar(context: Context, dynamicColors: Boolean, darkMode: Boolean, customThemeColor: Boolean = false): Boolean {
+            if (customThemeColor) {
+                val primary = MaterialColors.getColor(context, R.attr.colorPrimary, Color.BLUE)
+                return Color.luminance(primary) > 0.5f
+            }
             // Use light status bar (dark icons) when dynamic colors are enabled in light mode
             return dynamicColors && !darkMode
         }
 
-        fun toolbarTextColor(context: Context, dynamicColors: Boolean, darkMode: Boolean): Int {
-            return if (dynamicColors) {
+        fun toolbarTextColor(context: Context, dynamicColors: Boolean, darkMode: Boolean, customThemeColor: Boolean = false): Int {
+            return if (customThemeColor) {
+                MaterialColors.getColor(context, R.attr.colorOnPrimary, Color.WHITE)
+            } else if (dynamicColors) {
                 // Use colorOnSurface (dark on light, light on dark) when dynamic colors are enabled
                 MaterialColors.getColor(context, R.attr.colorOnSurface, Color.BLACK)
             } else {

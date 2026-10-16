@@ -254,6 +254,60 @@
                 android:drawablePadding="4dp" />
         </FrameLayout>
 
+                <LinearLayout
+                        android:id="@+id/main_vscode_chats_section"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:visibility="gone"
+                        android:paddingTop="8dp"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintTop_toBottomOf="@id/main_banner_no_network">
+                        <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal"
+                                android:paddingStart="16dp"
+                                android:paddingEnd="8dp">
+                                <TextView
+                                        android:id="@+id/main_vscode_chats_heading"
+                                        android:layout_width="0dp"
+                                        android:layout_height="wrap_content"
+                                        android:layout_weight="1"
+                                        android:text="@string/vscode_chat_entry"
+                                        android:textAppearance="@style/TextAppearance.AppCompat.Medium"
+                                        android:textStyle="bold" />
+                                <ImageButton
+                                        android:id="@+id/main_vscode_chats_toggle"
+                                        android:layout_width="48dp"
+                                        android:layout_height="48dp"
+                                        android:background="?attr/selectableItemBackgroundBorderless"
+                                        android:contentDescription="@string/vscode_chat_collapse_sessions"
+                                        android:padding="12dp"
+                                        app:srcCompat="@drawable/ic_expand_less_gray_24dp"
+                                        app:tint="?attr/colorOnSurfaceVariant" />
+                        </LinearLayout>
+                        <androidx.recyclerview.widget.RecyclerView
+                                android:id="@+id/main_vscode_chats_list"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:clipToPadding="false"
+                                android:nestedScrollingEnabled="false"
+                                android:paddingStart="8dp"
+                                android:paddingEnd="8dp" />
+                        <TextView
+                                android:id="@+id/main_vscode_chats_empty"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:paddingStart="16dp"
+                                android:paddingEnd="16dp"
+                                android:paddingBottom="8dp"
+                                android:text="@string/vscode_chat_empty"
+                                android:visibility="gone" />
+                </LinearLayout>
+
         <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
                 android:id="@+id/main_subscriptions_list_container"
                 android:layout_width="match_parent"
@@ -261,7 +315,7 @@
                 android:visibility="visible"
                 app:layout_constraintStart_toStartOf="parent" app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintBottom_toBottomOf="parent"
-                app:layout_constraintTop_toBottomOf="@id/main_banner_no_network">
+                app:layout_constraintTop_toBottomOf="@id/main_vscode_chats_section">
             <androidx.recyclerview.widget.RecyclerView
                     android:id="@+id/main_subscriptions_list"
                     android:layout_width="match_parent"
@@ -278,7 +332,7 @@
         <LinearLayout
                 android:orientation="vertical"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content" app:layout_constraintTop_toTopOf="parent"
+                android:layout_height="wrap_content" app:layout_constraintTop_toBottomOf="@id/main_vscode_chats_section"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintBottom_toTopOf="@+id/fab" app:layout_constraintStart_toStartOf="parent"
                 android:id="@+id/main_no_subscriptions" android:visibility="gone">
@@ -313,6 +367,21 @@
                     android:linksClickable="true"
                     android:autoLink="web"/>
         </LinearLayout>
+
+        <com.google.android.material.floatingactionbutton.FloatingActionButton
+                android:id="@+id/main_vscode_new_chat_fab"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="28dp"
+                android:layout_marginBottom="12dp"
+                android:contentDescription="@string/vscode_chat_new"
+                android:src="@drawable/ic_add_black_24dp"
+                app:backgroundTint="?attr/colorSecondaryContainer"
+                app:fabSize="mini"
+                app:layout_constraintBottom_toTopOf="@id/fab"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:tint="?attr/colorOnSecondaryContainer"
+                style="@style/FloatingActionButton" />
 
         <com.google.android.material.floatingactionbutton.FloatingActionButton
                 android:id="@+id/fab"

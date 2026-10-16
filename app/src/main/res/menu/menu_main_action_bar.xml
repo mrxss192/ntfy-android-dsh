@@ -26,6 +26,10 @@
         android:id="@+id/main_menu_settings"
         android:title="@string/main_menu_settings_title" />
     <item
+        android:id="@+id/main_menu_vscode_chats"
+        android:title="@string/vscode_chat_entry"
+        app:showAsAction="always" />
+    <item
         android:id="@+id/main_menu_docs"
         android:title="@string/main_menu_docs_title" />
     <item

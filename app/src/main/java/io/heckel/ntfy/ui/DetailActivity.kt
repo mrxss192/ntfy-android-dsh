@@ -146,13 +146,14 @@ class DetailActivity : AppCompatActivity(), NotificationFragment.NotificationSet
         appBaseUrl = getString(R.string.app_base_url)
 
         val toolbarLayout = findViewById<View>(R.id.app_bar_drawer)
-        val dynamicColors = repository.getDynamicColorsEnabled()
+        val dynamicColors = repository.getDynamicColorSchemeEnabled()
         val darkMode = isDarkThemeOn(this)
-        val statusBarColor = Colors.statusBarNormal(this, dynamicColors, darkMode)
+        val customThemeColor = repository.getCustomThemeColor() != null
+        val statusBarColor = Colors.statusBarNormal(this, dynamicColors, darkMode, customThemeColor)
         toolbarLayout.setBackgroundColor(statusBarColor)
 
         // Set collapse icon (back arrow when search is expanded) with proper tint
-        toolbarTextColor = Colors.toolbarTextColor(this, dynamicColors, darkMode)
+        toolbarTextColor = Colors.toolbarTextColor(this, dynamicColors, darkMode, customThemeColor)
         val collapseIcon = ContextCompat.getDrawable(this, R.drawable.ic_arrow_back_white_24dp)?.mutate()
         collapseIcon?.setTint(toolbarTextColor)
 
@@ -165,11 +166,11 @@ class DetailActivity : AppCompatActivity(), NotificationFragment.NotificationSet
         
         // Set system status bar appearance
         WindowInsetsControllerCompat(window, window.decorView).isAppearanceLightStatusBars =
-            Colors.shouldUseLightStatusBar(dynamicColors, darkMode)
+            Colors.shouldUseLightStatusBar(this, dynamicColors, darkMode, customThemeColor)
 
         // Set detail activity background: use theme background for dynamic colors, static gray for non-dynamic
         val detailContentLayout = findViewById<View>(R.id.detail_content_layout)
-        if (repository.getDynamicColorsEnabled()) {
+        if (repository.getDynamicColorSchemeEnabled()) {
             detailContentLayout.setBackgroundColor(
                 MaterialColors.getColor(
                     this,
@@ -415,6 +416,7 @@ class DetailActivity : AppCompatActivity(), NotificationFragment.NotificationSet
         messageBarText = messageBar.findViewById(R.id.message_bar_text)
         messageBarPublishButton = messageBar.findViewById(R.id.message_bar_publish_button)
         messageBarExpandButton = messageBar.findViewById(R.id.message_bar_expand_button)
+        CommandSuggestions(messageBarText)
 
         // Message bar enabled: Show message bar, hide FAB
         if (repository.getMessageBarEnabled()) {

@@ -4,11 +4,11 @@
          The translatable="false" attribute is just an additional safety. -->
 
     <!-- Main app constants -->
-    <string name="app_name" translatable="false">ntfy</string>
+    <string name="app_name" translatable="false">ntfy DSH</string>
     <string name="app_base_url" translatable="false">https://ntfy.sh</string> <!-- If changed, you must also change google-services.json! -->
 
     <!-- Main activity -->
-    <string name="main_menu_report_bug_url" translatable="false">https://github.com/binwiederhier/ntfy/issues</string>
+    <string name="main_menu_report_bug_url" translatable="false">https://github.com/mrxss192/ntfy-android-dsh/issues</string>
     <string name="main_menu_docs_url" translatable="false">https://ntfy.sh/docs</string>
     <string name="main_menu_donate_url" translatable="false">https://github.com/sponsors/binwiederhier</string>
 
@@ -24,6 +24,7 @@
     <string name="settings_general_dark_mode_key" translatable="false">DarkMode</string>
     <string name="settings_general_language_key" translatable="false">Language</string>
     <string name="settings_general_dynamic_colors_key" translatable="false">DynamicColors</string>
+    <string name="settings_general_custom_theme_color_key" translatable="false">CustomThemeColor</string>
     <string name="settings_general_message_bar_key" translatable="false">MessageBarEnabled</string>
     <string name="settings_backup_restore_backup_key" translatable="false">Backup</string>
     <string name="settings_backup_restore_restore_key" translatable="false">Restore</string>

@@ -66,10 +66,11 @@ class DetailSettingsActivity : AppCompatActivity() {
         }
 
         val toolbarLayout = findViewById<AppBarLayout>(R.id.app_bar_drawer)
-        val dynamicColors = repository.getDynamicColorsEnabled()
+        val dynamicColors = repository.getDynamicColorSchemeEnabled()
         val darkMode = isDarkThemeOn(this)
-        val statusBarColor = Colors.statusBarNormal(this, dynamicColors, darkMode)
-        val toolbarTextColor = Colors.toolbarTextColor(this, dynamicColors, darkMode)
+        val customThemeColor = repository.getCustomThemeColor() != null
+        val statusBarColor = Colors.statusBarNormal(this, dynamicColors, darkMode, customThemeColor)
+        val toolbarTextColor = Colors.toolbarTextColor(this, dynamicColors, darkMode, customThemeColor)
         toolbarLayout.setBackgroundColor(statusBarColor)
         
         val toolbar = toolbarLayout.findViewById<com.google.android.material.appbar.MaterialToolbar>(R.id.toolbar)
@@ -80,7 +81,7 @@ class DetailSettingsActivity : AppCompatActivity() {
         
         // Set system status bar appearance
         WindowInsetsControllerCompat(window, window.decorView).isAppearanceLightStatusBars =
-            Colors.shouldUseLightStatusBar(dynamicColors, darkMode)
+            Colors.shouldUseLightStatusBar(this, dynamicColors, darkMode, customThemeColor)
         
         // Title
         val displayName = intent.getStringExtra(DetailActivity.EXTRA_SUBSCRIPTION_DISPLAY_NAME) ?: return

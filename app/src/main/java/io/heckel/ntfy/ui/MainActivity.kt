@@ -11,6 +11,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.ConnectivityManager
 import android.net.Network
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
@@ -20,6 +21,7 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import android.widget.Button
+import android.widget.ImageButton
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
@@ -37,6 +39,9 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.view.updatePadding
 import androidx.core.view.isVisible
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.LiveData
+import androidx.lifecycle.Observer
+import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import androidx.work.Constraints
@@ -51,6 +56,8 @@ import io.heckel.ntfy.BuildConfig
 import io.heckel.ntfy.R
 import io.heckel.ntfy.app.Application
 import io.heckel.ntfy.db.Repository
+import io.heckel.ntfy.db.Notification
+import io.heckel.ntfy.db.PhoneConversation
 import io.heckel.ntfy.db.Subscription
 import io.heckel.ntfy.firebase.FirebaseMessenger
 import io.heckel.ntfy.msg.ApiService
@@ -63,6 +70,7 @@ import io.heckel.ntfy.service.SubscriberServiceManager
 import io.heckel.ntfy.util.Log
 import io.heckel.ntfy.util.SUBSCRIPTION_ICONS
 import io.heckel.ntfy.util.dangerButton
+import io.heckel.ntfy.util.decodeMessage
 import io.heckel.ntfy.util.displayName
 import io.heckel.ntfy.util.formatDateShort
 import io.heckel.ntfy.util.isDarkThemeOn
@@ -77,6 +85,9 @@ import io.heckel.ntfy.work.PollWorker
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.Date
 import java.util.concurrent.TimeUnit
@@ -99,7 +110,23 @@ class MainActivity : AppCompatActivity(), AddFragment.SubscribeListener, Notific
     private lateinit var mainList: RecyclerView
     private lateinit var mainListContainer: SwipeRefreshLayout
     private lateinit var adapter: MainAdapter
+    private lateinit var vscodeChatSection: View
+    private lateinit var vscodeChatAdapter: VscodeHomeAdapter
+    private lateinit var vscodeChatList: RecyclerView
+    private lateinit var vscodeChatEmpty: TextView
+    private lateinit var vscodeChatToggle: ImageButton
+    private lateinit var vscodeNewChatFab: FloatingActionButton
+    private lateinit var noEntries: View
     private lateinit var fab: FloatingActionButton
+    private var hasSubscriptions = false
+    private var hasVscodeChats = false
+    private var areVscodeChatsExpanded = true
+    private var latestVscodeConversationId: String? = null
+    private var vscodeConversations: List<PhoneConversation> = emptyList()
+    private var vscodeReplySubscriptionId: Long? = null
+    private var vscodeReplyNotifications: LiveData<List<Notification>>? = null
+    private var vscodeReplyObserver: Observer<List<Notification>>? = null
+    private val vscodeSummaryImportMutex = Mutex()
 
     // Other stuff
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
@@ -151,10 +178,11 @@ class MainActivity : AppCompatActivity(), AddFragment.SubscribeListener, Notific
 
         // Action bar
         val toolbarLayout = findViewById<AppBarLayout>(R.id.app_bar_drawer)
-        val dynamicColors = repository.getDynamicColorsEnabled()
+        val dynamicColors = repository.getDynamicColorSchemeEnabled()
         val darkMode = isDarkThemeOn(this)
-        val statusBarColor = Colors.statusBarNormal(this, dynamicColors, darkMode)
-        val toolbarTextColor = Colors.toolbarTextColor(this, dynamicColors, darkMode)
+        val customThemeColor = repository.getCustomThemeColor() != null
+        val statusBarColor = Colors.statusBarNormal(this, dynamicColors, darkMode, customThemeColor)
+        val toolbarTextColor = Colors.toolbarTextColor(this, dynamicColors, darkMode, customThemeColor)
         toolbarLayout.setBackgroundColor(statusBarColor)
         
         val toolbar = toolbarLayout.findViewById<com.google.android.material.appbar.MaterialToolbar>(R.id.toolbar)
@@ -166,13 +194,15 @@ class MainActivity : AppCompatActivity(), AddFragment.SubscribeListener, Notific
         
         // Set system status bar appearance
         WindowInsetsControllerCompat(window, window.decorView).isAppearanceLightStatusBars =
-            Colors.shouldUseLightStatusBar(dynamicColors, darkMode)
+            Colors.shouldUseLightStatusBar(this, dynamicColors, darkMode, customThemeColor)
 
         // Floating action button ("+")
         fab = findViewById(R.id.fab)
         fab.setOnClickListener {
             onSubscribeButtonClick()
         }
+        vscodeNewChatFab = findViewById(R.id.main_vscode_new_chat_fab)
+        vscodeNewChatFab.setOnClickListener { onNewVscodeConversationClick() }
         
         // Add bottom padding to FAB to account for navigation bar
         ViewCompat.setOnApplyWindowInsetsListener(fab) { view, insets ->
@@ -189,7 +219,7 @@ class MainActivity : AppCompatActivity(), AddFragment.SubscribeListener, Notific
         mainListContainer.setColorSchemeColors(Colors.swipeToRefreshColor(this))
 
         // Update main list based on viewModel (& its datasource/livedata)
-        val noEntries: View = findViewById(R.id.main_no_subscriptions)
+        noEntries = findViewById(R.id.main_no_subscriptions)
         val onSubscriptionClick = { s: Subscription -> onSubscriptionItemClick(s) }
         val onSubscriptionLongClick = { s: Subscription -> onSubscriptionItemLongClick(s) }
 
@@ -204,6 +234,25 @@ class MainActivity : AppCompatActivity(), AddFragment.SubscribeListener, Notific
             Colors.onPrimary(this)
         )
         mainList.adapter = adapter
+
+        vscodeChatSection = findViewById(R.id.main_vscode_chats_section)
+        vscodeChatList = findViewById(R.id.main_vscode_chats_list)
+        vscodeChatEmpty = findViewById(R.id.main_vscode_chats_empty)
+        vscodeChatToggle = findViewById(R.id.main_vscode_chats_toggle)
+        vscodeChatAdapter = VscodeHomeAdapter(::openVscodeConversation, ::confirmDeleteVscodeConversation)
+        vscodeChatList.layoutManager = LinearLayoutManager(this)
+        vscodeChatList.adapter = vscodeChatAdapter
+        areVscodeChatsExpanded = getSharedPreferences(VSCODE_CHAT_PREFERENCES, MODE_PRIVATE)
+            .getBoolean(KEY_VSCODE_CHATS_EXPANDED, true)
+        findViewById<TextView>(R.id.main_vscode_chats_heading).setOnClickListener { toggleVscodeChats() }
+        vscodeChatToggle.setOnClickListener {
+            toggleVscodeChats()
+        }
+
+        repository.getPhoneConversationsLiveData().observe(this) { conversations ->
+            vscodeConversations = conversations
+            renderVscodeConversations()
+        }
         
         // Apply window insets to ensure content is not covered by navigation bar
         mainList.clipToPadding = false
@@ -217,13 +266,8 @@ class MainActivity : AppCompatActivity(), AddFragment.SubscribeListener, Notific
             it?.let { subscriptions ->
                 // Update main list
                 adapter.submitList(subscriptions as MutableList<Subscription>)
-                if (it.isEmpty()) {
-                    mainListContainer.visibility = View.GONE
-                    noEntries.visibility = View.VISIBLE
-                } else {
-                    mainListContainer.visibility = View.VISIBLE
-                    noEntries.visibility = View.GONE
-                }
+                hasSubscriptions = subscriptions.isNotEmpty()
+                updateMainContentVisibility()
 
                 // Add scrub terms to log (in case it gets exported)
                 subscriptions.forEach { s ->
@@ -399,10 +443,81 @@ class MainActivity : AppCompatActivity(), AddFragment.SubscribeListener, Notific
 
     override fun onResume() {
         super.onResume()
+        renderVscodeConversations()
+        observeVscodeReplyNotifications()
         showHideNotificationMenuItems()
         showHideConnectionErrorMenuItem(repository.getConnectionDetails())
         showHideNoNetworkBanner()
         redrawList()
+    }
+
+    private fun renderVscodeConversations() {
+        val pinnedIds = getSharedPreferences(VSCODE_CHAT_PREFERENCES, MODE_PRIVATE)
+            .getStringSet(KEY_VSCODE_PINNED_CONVERSATIONS, emptySet())
+            .orEmpty()
+        val pinned = vscodeConversations.filter { it.id in pinnedIds }
+        val ordered = pinned + vscodeConversations.filterNot { it.id in pinnedIds }
+        vscodeChatAdapter.submit(ordered)
+        hasVscodeChats = ordered.isNotEmpty()
+        latestVscodeConversationId = ordered.firstOrNull()?.id
+        updateMainContentVisibility()
+    }
+
+    private fun observeVscodeReplyNotifications() {
+        val chatPreferences = getSharedPreferences(VSCODE_CHAT_PREFERENCES, MODE_PRIVATE)
+        val server = chatPreferences.getString(KEY_VSCODE_SERVER, null)?.trimEnd('/') ?: return
+        val topic = chatPreferences.getString(KEY_VSCODE_REPLY_TOPIC, null) ?: return
+        lifecycleScope.launch(Dispatchers.IO) {
+            val subscription = repository.getSubscriptions().firstOrNull {
+                it.baseUrl == server && it.topic == topic
+            } ?: return@launch
+            withContext(Dispatchers.Main) {
+                if (vscodeReplySubscriptionId == subscription.id) return@withContext
+                vscodeReplyObserver?.let { observer -> vscodeReplyNotifications?.removeObserver(observer) }
+                val source = repository.getNotificationsLiveData(subscription.id)
+                val observer = Observer<List<Notification>> { notifications ->
+                    lifecycleScope.launch(Dispatchers.IO) {
+                        vscodeSummaryImportMutex.withLock {
+                            notifications.sortedWith(compareBy<Notification> { it.timestamp }.thenBy { it.id })
+                                .forEach { updateVscodeConversationSummary(it) }
+                        }
+                    }
+                }
+                vscodeReplySubscriptionId = subscription.id
+                vscodeReplyNotifications = source
+                vscodeReplyObserver = observer
+                source.observe(this@MainActivity, observer)
+            }
+        }
+    }
+
+    private suspend fun updateVscodeConversationSummary(notification: Notification) {
+        if (notification.deleted) return
+        val body = decodeMessage(notification).trim()
+        if (body.isBlank()) return
+        val uri = runCatching { Uri.parse(notification.click) }.getOrNull()
+        val conversationId = uri?.takeIf { it.scheme == VSCODE_CHAT_SCHEME && it.host == "message" }
+            ?.pathSegments?.firstOrNull()
+        val sessionCode = uri?.getQueryParameter("code")?.takeIf { VSCODE_CHAT_CODE.matches(it) }?.uppercase()
+            ?: VSCODE_CHAT_CODE.find("${notification.title}\n$body")?.value?.uppercase()
+        val conversation = conversationId?.let { repository.getPhoneConversation(it) }
+            ?: sessionCode?.let { repository.getPhoneConversationBySessionCode(it) }
+            ?: return
+        val kind = uri?.getQueryParameter("kind")
+        val status = when {
+            kind == "failed" || body.contains("失败") || body.contains("未送达") -> VSCODE_CHAT_FAILED
+            kind == "bind" || kind == "assistant" -> VSCODE_CHAT_ACTIVE
+            else -> VSCODE_CHAT_PROCESSING
+        }
+        val updatedAt = notification.timestamp * 1000
+        if (updatedAt < conversation.updatedAt) return
+        val updated = conversation.copy(
+            lastMessage = body,
+            sessionCode = sessionCode ?: conversation.sessionCode,
+            status = status,
+            updatedAt = updatedAt,
+        )
+        if (updated != conversation) repository.updatePhoneConversation(updated)
     }
 
     private fun showHideBatteryBanner(subscriptions: List<Subscription>) {
@@ -529,7 +644,7 @@ class MainActivity : AppCompatActivity(), AddFragment.SubscribeListener, Notific
         this.menu = menu
         
         // Tint menu icons based on theme
-        val toolbarTextColor = Colors.toolbarTextColor(this, repository.getDynamicColorsEnabled(), isDarkThemeOn(this))
+        val toolbarTextColor = Colors.toolbarTextColor(this, repository.getDynamicColorSchemeEnabled(), isDarkThemeOn(this), repository.getCustomThemeColor() != null)
         for (i in 0 until menu.size) {
             menu[i].icon?.setTint(toolbarTextColor)
         }
@@ -632,6 +747,10 @@ class MainActivity : AppCompatActivity(), AddFragment.SubscribeListener, Notific
                 startActivity(Intent(this, SettingsActivity::class.java))
                 true
             }
+            R.id.main_menu_vscode_chats -> {
+                latestVscodeConversationId?.let(::openVscodeConversation) ?: onNewVscodeConversationClick()
+                true
+            }
             R.id.main_menu_report_bug -> {
                 startActivity(
                     Intent(Intent.ACTION_VIEW, getString(R.string.main_menu_report_bug_url).toUri())
@@ -658,6 +777,59 @@ class MainActivity : AppCompatActivity(), AddFragment.SubscribeListener, Notific
             }
             else -> super.onOptionsItemSelected(item)
         }
+    }
+
+    private fun updateMainContentVisibility() {
+        vscodeChatSection.isVisible = true
+        vscodeChatList.isVisible = hasVscodeChats && areVscodeChatsExpanded
+        vscodeChatEmpty.isVisible = !hasVscodeChats && areVscodeChatsExpanded
+        vscodeChatToggle.isVisible = hasVscodeChats
+        vscodeChatToggle.contentDescription = getString(
+            if (areVscodeChatsExpanded) R.string.vscode_chat_collapse_sessions
+            else R.string.vscode_chat_expand_sessions,
+        )
+        vscodeChatToggle.rotation = if (areVscodeChatsExpanded) 0f else 180f
+        val chatActionsVisible = !hasVscodeChats || !areVscodeChatsExpanded
+        fab.isVisible = chatActionsVisible
+        vscodeNewChatFab.isVisible = chatActionsVisible
+        mainListContainer.isVisible = hasSubscriptions
+        noEntries.isVisible = !hasSubscriptions
+    }
+
+    private fun toggleVscodeChats() {
+        areVscodeChatsExpanded = !areVscodeChatsExpanded
+        getSharedPreferences(VSCODE_CHAT_PREFERENCES, MODE_PRIVATE).edit()
+            .putBoolean(KEY_VSCODE_CHATS_EXPANDED, areVscodeChatsExpanded)
+            .apply()
+        updateMainContentVisibility()
+    }
+
+    private fun confirmDeleteVscodeConversation(conversationId: String, title: String) {
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.vscode_chat_delete_session_title)
+            .setMessage(getString(R.string.vscode_chat_delete_session_message, title))
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.vscode_chat_delete_session) { _, _ ->
+                lifecycleScope.launch(Dispatchers.IO) {
+                    repository.deletePhoneConversation(conversationId)
+                }
+            }
+            .show()
+    }
+
+    private fun openVscodeChats(conversationId: String? = null, newConversation: Boolean = false) {
+        val intent = Intent(this, VscodeConversationsActivity::class.java)
+        conversationId?.let { intent.putExtra("conversationId", it) }
+        if (newConversation) intent.putExtra("newConversation", true)
+        startActivity(intent)
+    }
+
+    private fun onNewVscodeConversationClick() {
+        openVscodeChats(newConversation = true)
+    }
+
+    private fun openVscodeConversation(conversationId: String) {
+        openVscodeChats(conversationId)
     }
 
     private fun onNotificationSettingsClick(enable: Boolean) {
@@ -933,6 +1105,17 @@ class MainActivity : AppCompatActivity(), AddFragment.SubscribeListener, Notific
     }
 
     companion object {
+        private const val VSCODE_CHAT_PREFERENCES = "vscode_chat"
+        private const val KEY_VSCODE_CHATS_EXPANDED = "home_chats_expanded"
+        private const val KEY_VSCODE_PINNED_CONVERSATIONS = "pinned_conversations"
+        private const val KEY_VSCODE_SERVER = "server"
+        private const val KEY_VSCODE_REPLY_TOPIC = "reply_topic"
+        private const val VSCODE_CHAT_SCHEME = "dsh-chat"
+        private const val VSCODE_CHAT_ACTIVE = "active"
+        private const val VSCODE_CHAT_PROCESSING = "processing"
+        private const val VSCODE_CHAT_FAILED = "failed"
+        private val VSCODE_CHAT_CODE = Regex("[A-F0-9]{12}", RegexOption.IGNORE_CASE)
+
         const val TAG = "NtfyMainActivity"
         const val EXTRA_SUBSCRIPTION_ID = "subscriptionId"
         const val EXTRA_SUBSCRIPTION_BASE_URL = "subscriptionBaseUrl"
