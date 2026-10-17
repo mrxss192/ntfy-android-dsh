@@ -372,7 +372,7 @@
                 android:id="@+id/main_vscode_new_chat_fab"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginEnd="28dp"
+                android:layout_marginEnd="24dp"
                 android:layout_marginBottom="12dp"
                 android:contentDescription="@string/vscode_chat_new"
                 android:src="@drawable/ic_add_black_24dp"

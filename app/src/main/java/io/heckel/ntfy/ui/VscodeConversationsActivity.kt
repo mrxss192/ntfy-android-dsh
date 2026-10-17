@@ -854,10 +854,14 @@ class VscodeConversationsActivity : AppCompatActivity() {
             gravity = Gravity.TOP
             setPadding(dp(16), dp(12), dp(16), dp(12))
         }
+        val taskInputLayout = com.google.android.material.textfield.TextInputLayout(this).apply {
+            boxBackgroundMode = com.google.android.material.textfield.TextInputLayout.BOX_BACKGROUND_OUTLINE
+            addView(taskInput, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        }
         CommandSuggestions(taskInput, listOf("/vscode"))
         val taskContainer = LinearLayout(this).apply {
             setPadding(dp(20), dp(8), dp(20), 0)
-            addView(taskInput)
+            addView(taskInputLayout, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         }
         val dialog = com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
             .setTitle(R.string.vscode_chat_new)

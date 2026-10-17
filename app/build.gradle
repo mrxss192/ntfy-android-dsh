@@ -5,6 +5,10 @@ plugins {
 }
 
 def debugBuildId = new Date().format('yyyyMMdd-HHmmss')
+def releaseKeystorePath = System.getenv('NTFY_DSH_RELEASE_KEYSTORE')
+def releaseStorePassword = System.getenv('NTFY_DSH_RELEASE_STORE_PASSWORD')
+def releaseKeyPassword = System.getenv('NTFY_DSH_RELEASE_KEY_PASSWORD') ?: releaseStorePassword
+def releaseSigningConfigured = releaseKeystorePath && releaseStorePassword
 
 apply plugin: 'com.android.application'
 apply plugin: 'kotlin-android'
@@ -19,8 +23,8 @@ android {
         minSdkVersion 26
         targetSdkVersion 36
 
-        versionCode 64
-        versionName "1.0.0"
+        versionCode 65
+        versionName "1.0.1"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
@@ -34,14 +38,25 @@ android {
         }
     }
 
+    signingConfigs {
+        dshRelease {
+            if (releaseSigningConfigured) {
+                storeFile file(releaseKeystorePath)
+                storePassword releaseStorePassword
+                keyAlias 'ntfy_dsh_release'
+                keyPassword releaseKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled false
             shrinkResources false
             debuggable false
-            // DEV/TEST ONLY: Uncomment this to test the release build with a debug key.
-            //                This is required to test against the production Firebase config.
-            // signingConfig signingConfigs.debug
+            if (releaseSigningConfigured) {
+                signingConfig signingConfigs.dshRelease
+            }
         }
         debug {
             minifyEnabled false

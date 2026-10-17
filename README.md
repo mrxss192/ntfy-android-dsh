@@ -1,6 +1,6 @@
 # ntfy Android DSH
 
-这是基于 [ntfy Android 上游项目](https://github.com/binwiederhier/ntfy-android) 修改的独立 fork，应用 ID 为 `io.heckel.ntfy.dsh`。它仍使用 ntfy 服务器和主题，并加入 DSH/VS Code Agent 会话聊天、全局自定义主题色及聊天背景/气泡颜色设置。
+这是基于 [ntfy Android 上游项目](https://github.com/binwiederhier/ntfy-android) 修改的独立 fork，应用 ID 为 `io.heckel.ntfy.dsh`。它使用 ntfy 服务器和主题，让用户通过手机触发 VS Code Copilot 任务、查看独立会话并继续对话，同时支持自定义主题色和聊天背景/气泡颜色。
 
 配套项目：[ntfy-task-notifier](https://github.com/mrxss192/ntfy-task-notifier)，提供 Windows bridge、PowerShell 安装器和 VS Code Agent 扩展。普通 ntfy 客户端也能向相同主题发送 `/vscode` 与 `/reply`；Android DSH fork 会将每条 VS Code 会话显示为独立聊天卡片，便于查看上下文和定向回复。
 
@@ -15,11 +15,15 @@
 
 ## 下载与签名
 
-发布包位于 [GitHub Releases](https://github.com/mrxss192/ntfy-android-dsh/releases)。
-此 fork 使用独立应用 ID 和签名证书，不使用上游 ntfy APK 的签名密钥。。签名状态会在每个 Release 中明确标注。
+正式版 APK 已发布在 [GitHub Releases](https://github.com/mrxss192/ntfy-android-dsh/releases)，使用本 fork 自有签名密钥，alias 为 `ntfy_dsh_release`。`fdroidRelease` APK 已通过 Android `apksigner` 验证（签名方案 v2）；证书 SHA-256 指纹为 `b31abc4680f898bad3ee99e0cbd3b36c12427356980ce5d874f0e85e790fcced`。
 
-## Build
-For up-to-date building instructions, please see the [official docs](https://docs.ntfy.sh/develop/#android-app).
+本 fork 使用独立应用 ID 和签名证书，不使用上游 ntfy APK 的签名密钥。
+
+## 构建与签名
+
+Release 签名使用 JKS keystore。设置当前 PowerShell 进程环境变量 `NTFY_DSH_RELEASE_KEYSTORE` 和 `NTFY_DSH_RELEASE_STORE_PASSWORD`；key alias 固定为 `ntfy_dsh_release`。若 key 密码与 store 密码不同，再设置 `NTFY_DSH_RELEASE_KEY_PASSWORD`。随后运行 `./gradlew :app:assembleFdroidRelease`。未设置 keystore 环境变量时，Gradle 会生成 unsigned APK。
+
+不要将 keystore 或密码提交到仓库。keystore 丢失后，无法为现有安装签署可覆盖更新的 APK。
 
 ## Translations
 We're using [Weblate](https://hosted.weblate.org/projects/ntfy/) to translate the ntfy Android app. We'd love your participation.

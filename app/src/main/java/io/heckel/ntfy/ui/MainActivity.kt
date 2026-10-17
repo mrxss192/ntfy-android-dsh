@@ -497,12 +497,11 @@ class MainActivity : AppCompatActivity(), AddFragment.SubscribeListener, Notific
         if (body.isBlank()) return
         val uri = runCatching { Uri.parse(notification.click) }.getOrNull()
         val conversationId = uri?.takeIf { it.scheme == VSCODE_CHAT_SCHEME && it.host == "message" }
-            ?.pathSegments?.firstOrNull()
+            ?.pathSegments?.firstOrNull()?.takeIf(VscodeChatCommand::isConversationId)
         val sessionCode = uri?.getQueryParameter("code")?.takeIf { VSCODE_CHAT_CODE.matches(it) }?.uppercase()
             ?: VSCODE_CHAT_CODE.find("${notification.title}\n$body")?.value?.uppercase()
-        val conversation = conversationId?.let { repository.getPhoneConversation(it) }
+        val existing = conversationId?.let { repository.getPhoneConversation(it) }
             ?: sessionCode?.let { repository.getPhoneConversationBySessionCode(it) }
-            ?: return
         val kind = uri?.getQueryParameter("kind")
         val status = when {
             kind == "failed" || body.contains("失败") || body.contains("未送达") -> VSCODE_CHAT_FAILED
@@ -510,14 +509,20 @@ class MainActivity : AppCompatActivity(), AddFragment.SubscribeListener, Notific
             else -> VSCODE_CHAT_PROCESSING
         }
         val updatedAt = notification.timestamp * 1000
-        if (updatedAt < conversation.updatedAt) return
-        val updated = conversation.copy(
-            lastMessage = body,
-            sessionCode = sessionCode ?: conversation.sessionCode,
+        val title = sessionCode?.let { getString(R.string.vscode_chat_legacy_title, it) }
+            ?: getString(R.string.vscode_chat_title)
+        val updated = VscodeChatConversationSummary.update(
+            existing = existing,
+            conversationId = conversationId,
+            sessionCode = sessionCode,
+            title = title,
+            body = body,
             status = status,
             updatedAt = updatedAt,
         )
-        if (updated != conversation) repository.updatePhoneConversation(updated)
+            ?: return
+        if (existing == null) repository.addPhoneConversation(updated)
+        else if (updated != existing) repository.updatePhoneConversation(updated)
     }
 
     private fun showHideBatteryBanner(subscriptions: List<Subscription>) {
